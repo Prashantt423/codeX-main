@@ -1,159 +1,54 @@
-import "./App.scss";
-import CodeMirror from "@uiw/react-codemirror";
-import { dracula } from "@uiw/codemirror-theme-dracula";
-import Header from "./header/Header";
-import Functions from "./functions/Functions";
-import Options from "./options/Options";
-import { useState } from "react";
-import { useEffect } from "react";
-import axios from "axios";
-import moment from "moment";
-import stubs from "./stubs";
-function App() {
-  const [code, setCode] = useState("");
-  const [output, setOutput] = useState("");
-  const [language, setLanguage] = useState("cpp");
-  const [jobId, setJobId] = useState(null);
-  const [status, setStatus] = useState(null);
-  const [jobDetails, setJobDetails] = useState(null);
+import React, { Component, Suspense } from "react";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./app.css";
+import { connect } from "react-redux";
 
-  useEffect(() => {
-    setCode(stubs[language]);
-  }, [language]);
+const loading = (
+  <div className="pt-3 text-center">
+    <div className="sk-spinner sk-spinner-pulse">Loading...</div>
+  </div>
+);
 
-  useEffect(() => {
-    const defaultLang = localStorage.getItem("default-language") || "cpp";
-    setLanguage(defaultLang);
-  }, []);
+// Containers
+const DefaultLayout = React.lazy(() => import("./layout/defaultLayout"));
 
-  let pollInterval;
-
-  const handleSubmit = async () => {
-    const payload = {
-      language,
-      code,
-    };
-    try {
-      setOutput("");
-      setStatus(null);
-      setJobId(null);
-      setJobDetails(null);
-      const { data } = await axios.post("http://localhost:5000/run", payload);
-      if (data.jobId) {
-        setJobId(data.jobId);
-        setStatus("Submitted.");
-
-        // poll here
-        pollInterval = setInterval(async () => {
-          const { data: statusRes } = await axios.get(
-            `http://localhost:5000/status`,
-            {
-              params: {
-                id: data.jobId,
-              },
-            }
-          );
-          const { success, job, error } = statusRes;
-          console.log(statusRes);
-          if (success) {
-            const { status: jobStatus, output: jobOutput } = job;
-            setStatus(jobStatus);
-            setJobDetails(job);
-            if (jobStatus === "pending") return;
-            setOutput(jobOutput);
-            clearInterval(pollInterval);
-          } else {
-            console.error(error);
-            setOutput(error);
-            setStatus("Bad request");
-            clearInterval(pollInterval);
-          }
-        }, 1000);
-      } else {
-        setOutput("Retry again.");
-      }
-    } catch ({ response }) {
-      if (response) {
-        const errMsg = response.data.err.stderr;
-        setOutput(errMsg);
-      } else {
-        setOutput("Please retry submitting.");
-      }
-    }
-  };
-
-  const setDefaultLanguage = () => {
-    localStorage.setItem("default-language", language);
-    console.log(`${language} set as default!`);
-  };
-
-  const renderTimeDetails = () => {
-    if (!jobDetails) {
-      return "";
-    }
-    let { submittedAt, startedAt, completedAt } = jobDetails;
-    let result = "";
-    submittedAt = moment(submittedAt).toString();
-    result += `Job Submitted At: ${submittedAt}  `;
-    if (!startedAt || !completedAt) return result;
-    const start = moment(startedAt);
-    const end = moment(completedAt);
-    const diff = end.diff(start, "seconds", true);
-    result += `Execution Time: ${diff}s`;
-    return result;
-  };
-
+// Pages
+const Login = React.lazy(() => import("./pages/login/Login"));
+const Register = React.lazy(() => import("./pages/register/Register"));
+const Page404 = React.lazy(() => import("./pages/page404/Page404"));
+const Page500 = React.lazy(() => import("./pages/page500/Page500"));
+const HomePage = React.lazy(() => import("./pages/homepage/Homepage"));
+function App(props) {
+  console.log(props?.uservalue);
   return (
-    <div className="App">
-      <Header />
-      <div className="container">
-        <div className="wrap">
-          <Functions />
-          <textarea
-            name="quest"
-            value={output}
-            cols="100"
-            rows="10"
-            style={{ color: status === "success" ? "green" : "red" }}
-            className="left-half"
-          ></textarea>
-        </div>
-        <div className="right-half">
-          <select
-            value={language}
-            onChange={(e) => {
-              const shouldSwitch = window.confirm(
-                "Are you sure you want to change language? WARNING: Your current code will be lost."
-              );
-              if (shouldSwitch) {
-                setLanguage(e.target.value);
-              }
-            }}
-          >
-            <option value="cpp">C++</option>
-            <option value="py">Python</option>
-          </select>
-          <CodeMirror
-            className="ide"
-            value={code}
-            height="78vh"
-            width="100%"
-            theme={dracula}
-            keymap="sublime"
-            mode="python"
-            onChange={(value) => setCode(value)}
+    <Router>
+      <Suspense fallback={loading}>
+        <Routes>
+          <Route exact path="/login" name="Login Page" element={<Login />} />
+          <Route
+            exact
+            path="/register"
+            name="Register Page"
+            element={<Register />}
           />
-          <div className="btn">
-            <button id="item0">Custom Input</button>
-            <button id="item1">Run Code</button>
-            <button id="item2" onClick={handleSubmit}>
-              Submit
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+          <Route exact path="/404" name="Page 404" element={<Page404 />} />
+          <Route exact path="/500" name="Page 500" element={<Page500 />} />
+
+          <Route
+            path="*"
+            name="Home"
+            element={<DefaultLayout children={<HomePage />}></DefaultLayout>}
+          />
+        </Routes>
+      </Suspense>
+    </Router>
   );
 }
 
-export default App;
+const mapStateToProps = (state) => ({
+  uservalue: state.uservalue,
+  token: state.token,
+});
+
+export default connect(mapStateToProps)(App);
